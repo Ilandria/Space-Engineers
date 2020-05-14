@@ -336,8 +336,30 @@ private class InventoryCommand : Command
 	}
 }
 
-// Assumption: Column 1 is fully built before Column 2 starts, and Column 1 is not changed after Column 2 starts.
-//                                     37
-// this is a label on a panel          \n
-// waelfjwefjawoejfewlf                \n
-// wefweaf                             \n
+/*
+display -id 0 -cols 2
+column -id 0
+line -width 0.9
+label -name Storage -align center
+line -width 1
+label
+inventory -name Main -blocks Cargo (Storage)
+inventory -name Pickup -blocks Cargo (Pickup)
+inventory -name Ice -blocks H2
+
+column -id 1
+line -width 0.9
+label -name Blah2
+line -width 1
+label -name Blah3
+label -name Blah4
+label -name Blah5
+label -name Blah6
+label -name Blah7
+label -name Blah8
+label -name Blah9
+label -name Blah10
+label -name Blah11
+label -name Blah12
+label -name Blah13
+*/
