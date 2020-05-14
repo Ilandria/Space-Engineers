@@ -1,4 +1,4 @@
-private static class Config
+static class Config
 {
 	public static char barFull = '■';
 	public static char barEmpty = '·';
@@ -7,7 +7,7 @@ private static class Config
 	public static char hLine = '─';
 }
 
-private List<SurfaceProvider> providers;
+List<SurfaceProvider> providers;
 
 public Program()
 {
@@ -69,10 +69,10 @@ public void Main(string argument, UpdateType updateSource)
 	providers.ForEach(provider => { provider.Render(); });
 }
 
-private class SurfaceProvider
+class SurfaceProvider
 {
-	private readonly List<Surface> surfaces;
-	private Surface targetSurface;
+	readonly List<Surface> surfaces;
+	Surface targetSurface;
 
 	public SurfaceProvider(IMyTextSurfaceProvider textSurfaceProvider)
 	{
@@ -100,12 +100,12 @@ private class SurfaceProvider
 	}
 }
 
-private class Surface
+class Surface
 {
-	private readonly int displayWidth;
-	private readonly List<ICommand> commands;
-	private readonly MyStringBuilder content;
-	private readonly IMyTextSurface textSurface;
+	readonly int displayWidth;
+	readonly List<ICommand> commands;
+	readonly MyStringBuilder content;
+	readonly IMyTextSurface textSurface;
 
 	public Surface(IMyTextSurface textSurface)
 	{
@@ -135,7 +135,7 @@ private class Surface
 	}
 }
 
-private static class Utils
+static class Utils
 {
 	public static bool Contains(string value, string[] filters)
 	{
@@ -219,10 +219,10 @@ private static class Utils
 	}
 }
 
-private class MyStringBuilder
+class MyStringBuilder
 {
 	public int LineCount { get; private set; }
-	private StringBuilder stringBuilder;
+	StringBuilder stringBuilder;
 
 	public MyStringBuilder()
 	{
@@ -247,13 +247,13 @@ private class MyStringBuilder
 	}
 }
 
-private interface ICommand
+interface ICommand
 {
 	void Configure(int displayWidth);
 	void Run(MyStringBuilder output);
 }
 
-private abstract class Command : ICommand
+abstract class Command : ICommand
 {
 	protected readonly Dictionary<string, string[]> args;
 
@@ -266,9 +266,9 @@ private abstract class Command : ICommand
 	public virtual void Run(MyStringBuilder output) { }
 }
 
-private class LineCommand : Command
+class LineCommand : Command
 {
-	private string line = "";
+	string line = "";
 
 	public LineCommand (Dictionary<string, string[]> args) : base(args) { }
 
@@ -285,9 +285,9 @@ private class LineCommand : Command
 	}
 }
 
-private class LabelCommand : Command
+class LabelCommand : Command
 {
-	private string labelText = "";
+	string labelText = "";
 
 	public LabelCommand (Dictionary<string, string[]> args) : base(args) { }
 
@@ -304,12 +304,12 @@ private class LabelCommand : Command
 	}
 }
 
-private class InventoryCommand : Command
+class InventoryCommand : Command
 {
-	private readonly List<IMyTerminalBlock> filteredInventories;
-	private string name = "";
-	private float maxVolume = 0.0f;
-	private int displayWidth = 1;
+	readonly List<IMyTerminalBlock> filteredInventories;
+	string name = "";
+	float maxVolume = 0.0f;
+	int displayWidth = 1;
 
 	public InventoryCommand (Dictionary<string, string[]> args, List<IMyTerminalBlock> blocksWithInventories) : base(args)
 	{
