@@ -11,13 +11,12 @@ List<SurfaceProvider> providers;
 
 public Program()
 {
-	Runtime.UpdateFrequency = UpdateFrequency.Update100;
 	providers = new List<SurfaceProvider>();
 	List<IMyTerminalBlock> blocks = new List<IMyTerminalBlock>();
 	GridTerminalSystem.GetBlocks(blocks);
 	List<IMyTerminalBlock> blocksWithInventories = blocks.Where(block => { return block.GetInventory() != null; }).ToList();
 
-	foreach (IMyTerminalBlock block in blocks.Where(block => { return block as IMyTextSurfaceProvider != null && block.CustomData.StartsWith("display"); }))
+	foreach (IMyTerminalBlock block in blocks.Where(block => { return block as IMyTextSurfaceProvider != null && block.CustomData.StartsWith("config"); }))
 	{
 		SurfaceProvider provider = new SurfaceProvider(block as IMyTextSurfaceProvider);
 		providers.Add(provider);
@@ -37,12 +36,29 @@ public Program()
 
 			switch (inputLineComponents[0])
 			{
+				case "config":
+					switch (Utils.GetArgValue("update", args, "0"))
+					{
+						case "1":
+							Runtime.UpdateFrequency = UpdateFrequency.Update1;
+							break;
+
+						case "10":
+							Runtime.UpdateFrequency = UpdateFrequency.Update10;
+							break;
+						
+						default:
+							Runtime.UpdateFrequency = UpdateFrequency.Update100;
+							break;
+					}
+					break;
+
 				case "display":
 					provider.SetTargetSurface(Int32.Parse(Utils.GetArgValue("id", args, "0")));
 					break;
 
 				case "column":
-					//provider.SetColumn(Int32.Parse(Utils.GetArgValue("id", args, "0")));
+					provider.SetTargetColumn(Int32.Parse(Utils.GetArgValue("id", args, "0")));
 					break;
 
 				case "label":
@@ -66,7 +82,7 @@ public Program()
 
 public void Main(string argument, UpdateType updateSource)
 {
-	providers.ForEach(provider => { provider.Render(); });
+	providers.ForEach(provider => { provider.Update(); });
 }
 
 class SurfaceProvider
@@ -89,53 +105,146 @@ class SurfaceProvider
 		targetSurface = surfaces[surfaceId % surfaces.Count];
 	}
 
+	public void SetTargetColumn(int columnId)
+	{
+		targetSurface.SetTargetColumn(columnId);
+	}
+
 	public void AddCommand(ICommand command)
 	{
 		targetSurface.AddCommand(command);
 	}
 
-	public void Render()
+	public void Update()
 	{
-		surfaces.ForEach(surface => { surface.Render(); });
+		surfaces.ForEach(surface => { surface.Update(); });
 	}
 }
 
 class Surface
 {
 	readonly int displayWidth;
-	readonly List<ICommand> commands;
-	readonly MyStringBuilder content;
+	readonly List<SurfaceColumn> columns;
 	readonly IMyTextSurface textSurface;
+	readonly StringBuilder renderBuffer;
+	readonly List<MyStringBuilder> columnOutput;
+	char[] emptyLine;
+	char[] lineRender;
+	SurfaceColumn targetColumn;
+	int columnWidth;
 
 	public Surface(IMyTextSurface textSurface)
 	{
-		commands = new List<ICommand>();
 		this.textSurface = textSurface;
-		displayWidth = (int)((textSurface.TextureSize.X > textSurface.TextureSize.Y ? 50.0f : 25.0f) / textSurface.FontSize);
+		displayWidth = (int)((textSurface.TextureSize.X > textSurface.TextureSize.Y ? 52.0f : 26.0f) / textSurface.FontSize);
+		columnWidth = displayWidth;
 		this.textSurface.ContentType = ContentType.TEXT_AND_IMAGE;
-		content = new MyStringBuilder();
+		columns = new List<SurfaceColumn>();
+		columns.Add(new SurfaceColumn(displayWidth));
+		renderBuffer = new StringBuilder();
+		columnOutput = new List<MyStringBuilder>();
+		UpdateLineBuffers();
 	}
 
 	public void AddCommand(ICommand command)
 	{
-		command.Configure(displayWidth);
-		commands.Add(command);
+		targetColumn.AddCommand(command);
 	}
 
-	public void Render()
+	public void SetTargetColumn(int columnId)
 	{
-		content.Clear();
-
-		commands.ForEach(command =>
+		if (columnId == columns.Count)
 		{
-			command.Run(content);
+			columns.Add(new SurfaceColumn());
+			columnWidth = (int)(displayWidth / (float)columns.Count + 0.5f);
+			columns.ForEach(column => { column.ChangeWidth(columnWidth - 1); });
+			UpdateLineBuffers();
+		}
+
+		targetColumn = columns[columnId % columns.Count];
+	}
+
+	public void Update()
+	{
+		renderBuffer.Clear();
+		columnOutput.Clear();
+
+		columns.ForEach(column =>
+		{
+			columnOutput.Add(column.Update());
 		});
 
-		textSurface.WriteText(content.ToString(), false);
+		for (int line = 0; line < 17; line++)
+		{
+			for (int col = 0; col < columns.Count; col++)
+			{
+				if (line < columnOutput[col].LineCount)
+				{
+					int lineStartIndex = (columnWidth - 1) * line;
+					columnOutput[col].StringBuilder.CopyTo(lineStartIndex, lineRender, 0, columnWidth - 1);
+					renderBuffer.Append(lineRender);
+				}
+				else
+				{
+					renderBuffer.Append(emptyLine);
+				}
+
+				renderBuffer.Append(' ');
+			}
+
+			renderBuffer.Append('\n');
+		}
+
+		textSurface.WriteText(renderBuffer.ToString());
+	}
+
+	private void UpdateLineBuffers()
+	{
+		emptyLine = new char[columnWidth - 1];
+		lineRender = new char[columnWidth - 1];
+
+		for (int i = 0; i < columnWidth - 1; i++)
+		{
+			emptyLine[i] = ' ';
+			lineRender[i] = ' ';
+		}
 	}
 }
 
-static class Utils
+class SurfaceColumn
+{
+	readonly List<ICommand> commands;
+	readonly MyStringBuilder output;
+	int columnWidth;
+
+	public SurfaceColumn(int columnWidth = 0)
+	{
+		this.columnWidth = columnWidth;
+		commands = new List<ICommand>();
+		output = new MyStringBuilder();
+	}
+
+	public void ChangeWidth(int columnWidth)
+	{
+		this.columnWidth = columnWidth;
+		commands.ForEach(command =>	{ command.Configure(columnWidth); });
+	}
+
+	public void AddCommand(ICommand command)
+	{
+		command.Configure(columnWidth);
+		commands.Add(command);
+	}
+
+	public MyStringBuilder Update()
+	{
+		output.Clear();
+		commands.ForEach(command => { command.Run(output); } );
+		return output;
+	}
+}
+
+class Utils
 {
 	public static bool Contains(string value, string[] filters)
 	{
@@ -170,19 +279,34 @@ static class Utils
 		return String.Format($"{{0,{length}}}", value);
 	}
 
+	public static string AlignLeft(string value, int length)
+	{
+		return String.Format($"{{0,-{length}}}", value);
+	}
+
+	public static string Truncate(string value, int length)
+	{
+		return value.Substring(0, Math.Min(value.Length, length));
+	}
+
 	public static string Align(string value, int length, string alignment)
 	{
 		switch (alignment)
 		{
 			case "right": return AlignRight(value, length);
 			case "center": return AlignCenter(value, length);
-			default: return value;
+			default: return AlignLeft(value, length);
 		}
 	}
 
 	public static string CapacityRatio(float current, float max, string label)
 	{
 		return $"{String.Format("{0:0.0} / {1:0.0}", current, max)} {label}";
+	}
+
+	public static string RemainingCapacity(float remaining, string label)
+	{
+		return $"{String.Format("{0:0.0}", remaining)} {label}";
 	}
 
 	public static string PercentBar(float current, float max, int width)
@@ -197,7 +321,7 @@ static class Utils
 			result += i < meterCount ? Config.barFull : Config.barEmpty;
 		}
 
-		result += $"{Config.barRight}{AlignRight(((int)(ratio * 100 + 0.5f)).ToString(), 5)}%";
+		result += $"{Config.barRight}{AlignRight(((int)(ratio * 100 + 0.5f)).ToString(), 4)}%";
 		return result;
 	}
 
@@ -222,28 +346,28 @@ static class Utils
 class MyStringBuilder
 {
 	public int LineCount { get; private set; }
-	StringBuilder stringBuilder;
+	public StringBuilder StringBuilder { get; private set; }
 
 	public MyStringBuilder()
 	{
-		stringBuilder = new StringBuilder();
+		StringBuilder = new StringBuilder();
 	}
 
 	public void Clear()
 	{
 		LineCount = 0;
-		stringBuilder.Clear();
+		StringBuilder.Clear();
 	}
 
-	public void AppendLine(string line)
+	public void Append(string line)
 	{
 		LineCount++;
-		stringBuilder.AppendLine(line);
+		StringBuilder.Append(line);
 	}
 
 	public override string ToString()
 	{
-		return stringBuilder.ToString();
+		return StringBuilder.ToString();
 	}
 }
 
@@ -277,11 +401,12 @@ class LineCommand : Command
 		string width = Utils.GetArgValue("width", args, "0.5");
 		float widthRatio = Single.Parse(width);
 		line = Utils.AlignCenter(new string(Config.hLine, (int)(displayWidth * widthRatio + 0.5f)), displayWidth);
+		line = Utils.Truncate(line, displayWidth);
 	}
 
 	public override void Run(MyStringBuilder output)
 	{
-		output.AppendLine(line);
+		output.Append(line);
 	}
 }
 
@@ -296,11 +421,12 @@ class LabelCommand : Command
 		labelText = Utils.GetArgValue("name", args);
 		string align = Utils.GetArgValue("align", args);
 		labelText = Utils.Align(labelText, displayWidth, align);
+		labelText = Utils.Truncate(labelText, displayWidth);
 	}
 
 	public override void Run(MyStringBuilder output)
 	{
-		output.AppendLine(labelText);
+		output.Append(labelText);
 	}
 }
 
@@ -330,14 +456,15 @@ class InventoryCommand : Command
 		float currentVolume = 0.0f;
 		filteredInventories.ForEach(block => { currentVolume += block.GetInventory().CurrentVolume.RawValue; });
 		currentVolume /= 1000000.0f;
+		string remaining = Utils.RemainingCapacity(maxVolume - currentVolume, "kL");
 
-		output.AppendLine($"{name} {Utils.AlignRight(Utils.CapacityRatio(currentVolume, maxVolume, "kL"), displayWidth - name.Length)}");
-		output.AppendLine(Utils.PercentBar(currentVolume, maxVolume, displayWidth));
+		output.Append(Utils.Truncate($"{name}{Utils.AlignRight(remaining, displayWidth - name.Length)}", displayWidth));
+		output.Append(Utils.Truncate(Utils.PercentBar(currentVolume, maxVolume, displayWidth), displayWidth));
 	}
 }
 
 /*
-display -id 0 -cols 2
+display -id 0
 column -id 0
 line -width 0.9
 label -name Storage -align center
