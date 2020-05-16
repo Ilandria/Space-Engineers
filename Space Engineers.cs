@@ -16,7 +16,7 @@ public Program()
 	GridTerminalSystem.GetBlocks(blocks);
 	List<IMyTerminalBlock> blocksWithInventories = blocks.Where(block => { return block.GetInventory() != null; }).ToList();
 
-	foreach (IMyTerminalBlock block in blocks.Where(block => { return block as IMyTextSurfaceProvider != null && block.CustomData.StartsWith("config"); }))
+	foreach (IMyTerminalBlock block in blocks.Where(block => { return block as IMyTextSurfaceProvider != null && (block.CustomData.StartsWith("config") || block.CustomData.StartsWith("panel")); }))
 	{
 		SurfaceProvider provider = new SurfaceProvider(block as IMyTextSurfaceProvider);
 		providers.Add(provider);
